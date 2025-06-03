@@ -12,6 +12,6 @@ client_script{
 
 -- data_file 
 'lunguages'{
-    'locales/en.lua',
-    'locales/jp.lua',
+    'locale/en.lua',
+    'locale/jp.lua',
 }
