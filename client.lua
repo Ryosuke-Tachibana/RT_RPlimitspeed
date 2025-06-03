@@ -4,7 +4,27 @@ local currentSpeedLimit = 50.0
 local speedLimit = 0.0
 local isInVehicle = false
 local notificationType = "okok" --'ox''qb''gta''okok'
+local currentLanguage = "jp" -- default jp 'en'
+local locale = {}
 
+local function loadLocale(lang)
+    local path = string.format('locales/%s', lang)
+    local loadedLocale = require(path)
+    if loadedLocale then
+        locale = loadedLocale
+        print(string.format('Loaded locale: %s', lang))
+        return true
+    else
+        print(string.format('Failed to load locale: %s', lang))
+        return false
+    end
+end
+
+loadLocale(currentLanguage)
+
+local function getLocalizedText(key)
+    return locale[key]
+end
 
 local function sendNotification(type, message, duration)
     if type == "okok" and exports.okokNotify then
@@ -20,7 +40,6 @@ local function sendNotification(type, message, duration)
     end
 end
 
--- UIの描画
 Citizen.CreateThread(function()
     while true do
         Citizen.Wait(0)
@@ -37,7 +56,7 @@ Citizen.CreateThread(function()
             SetTextScale(0.4, 0.4)
             SetTextColour(textColor.r, textColor.g, textColor.b, textColor.a)
             SetTextEntry("STRING")
-            AddTextComponentString("速度制限設定")
+            AddTextComponentString(getLocalizedText("speed_limit_setting"))
             DrawText(x + 0.01, y + 0.01)
 
             SetTextScale(0.5, 0.5)
@@ -47,41 +66,57 @@ Citizen.CreateThread(function()
 
             SetTextScale(0.3, 0.3)
             SetTextEntry("STRING")
-            AddTextComponentString("↑/↓: 変更  Enter: 決定")
+            AddTextComponentString(getLocalizedText("change_speed"))
             DrawText(x + 0.01, y + 0.07)
         end
     end
 end)
 
--- UIの表示/非表示と速度制限のオン/オフを切り替えるコマンド
+
 RegisterCommand('setlimitspeed', function()
     isSpeedLimitUIOpen = not isSpeedLimitUIOpen
-    -- UIが開いている状態では速度制限をオンにしない。決定を押した時のみオンにする。
+    
     if not isSpeedLimitUIOpen and isSpeedLimited then
-        sendNotification(notificationType, string.format('速度制限を %.1f km/h に設定しました。', speedLimit), 3000)
+        sendNotification(notificationType, string.format(getLocalizedText("speed_limit_set"), speedLimit), 3000)
     elseif not isSpeedLimitUIOpen and not isSpeedLimited and speedLimit > 0 then
-        sendNotification(notificationType, '速度制限を無効にしました。', 3000)
+        sendNotification(notificationType, getLocalizedText("speed_limit_disabled"), 3000)
     elseif not isSpeedLimitUIOpen then
-        -- UIを閉じただけで、特に速度制限の状態は変わらない場合
+        
     end
 end, false)
 
--- 通知タイプを設定するコマンド
 RegisterCommand('setnotify', function(source, args)
     if #args == 1 then
         local type = string.lower(args[1])
         if type == "okok" or type == "ox" or type == "qb" or type == "gta" then
             notificationType = type
-            sendNotification("gta", string.format('通知タイプを "%s" に設定しました。', type), 2000)
+            sendNotification("gta", string.format(getLocalizedText("notification_type_set"), type), 2000)
         else
-            sendNotification("gta", '無効な通知タイプです。使用可能なタイプ: okok, ox, qb, gta', 3000)
+            sendNotification("gta", getLocalizedText("invalid_notification_type"), 3000)
         end
     else
-        sendNotification("gta", '使用方法: /setnotify [okok/ox/qb/gta]', 3000)
+        sendNotification("gta", getLocalizedText("usage_setnotify"), 3000)
     end
 end, false)
 
--- UIが開いている間の入力処理と速度制限値の確定
+RegisterCommand('setlang', function(source, args)
+    if #args == 1 then
+        local lang = string.lower(args[1])
+        if lang == "jp" or lang == "en" then
+            if loadLocale(lang) then
+                currentLanguage = lang
+                sendNotification("gta", string.format(getLocalizedText("language_set"), lang), 2000)
+            else
+                sendNotification("gta", getLocalizedText("invalid_language"), 3000)
+            end
+        else
+            sendNotification("gta", getLocalizedText("usage_setlang"), 3000)
+        end
+    else
+        sendNotification("gta", getLocalizedText("usage_setlang"), 3000)
+    end
+end, false)
+
 Citizen.CreateThread(function()
     while true do
         Citizen.Wait(0)
@@ -94,13 +129,12 @@ Citizen.CreateThread(function()
                 speedLimit = currentSpeedLimit
                 isSpeedLimited = true
                 isSpeedLimitUIOpen = false -- UIを閉じる
-                sendNotification(notificationType, string.format('速度制限を %.1f km/h に設定しました。', speedLimit), 3000)
+                sendNotification(notificationType, string.format(getLocalizedText("speed_limit_set"), speedLimit), 3000)
             end
         end
     end
 end)
 
--- 車両に乗っているかの状態を監視し、降りたらUIを閉じる
 Citizen.CreateThread(function()
     while true do
         Citizen.Wait(1000)
@@ -111,7 +145,6 @@ Citizen.CreateThread(function()
     end
 end)
 
--- 速度監視と制御
 Citizen.CreateThread(function()
     while true do
         Citizen.Wait(0)
