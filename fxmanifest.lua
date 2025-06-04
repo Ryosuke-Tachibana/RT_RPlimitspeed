@@ -10,8 +10,11 @@ client_script{
     'client.lua',
 }
 
--- data_file 
-'lunguages'{
+files {
     'locale/en.lua',
     'locale/jp.lua',
+}
+
+data_files {
+    ['locales'] = 'locale/*', 
 }
