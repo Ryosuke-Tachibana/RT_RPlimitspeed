@@ -2,28 +2,23 @@ local isSpeedLimitUIOpen = false
 local isSpeedLimited = false
 local currentSpeedLimit = 50.0
 local speedLimit = 0.0
-local isInVehicle = false
+local isInVehicle = false 
 local notificationType = "okok" --'ox''qb''gta''okok'
-local currentLanguage = "jp" -- default jp 'en'
-local locale = {}
 
-local function loadLocale(lang)
-    local path = string.format('locales/%s', lang)
-    local loadedLocale = require(path)
-    if loadedLocale then
-        locale = loadedLocale
-        print(string.format('Loaded locale: %s', lang))
-        return true
-    else
-        print(string.format('Failed to load locale: %s', lang))
-        return false
-    end
+local currentLanguage = GetConvar('RPlimitspeed_locale', 'jp') 
+
+
+local locale = RPlimitspeedLocale[currentLanguage] or {} 
+
+
+if not RPlimitspeedLocale[currentLanguage] then
+    print(string.format('^1[RPlimitspeed]^0 Error: Translations not found for locale: %s. Using default (jp) or empty.', currentLanguage))
+    locale = RPlimitspeedLocale['jp'] or {} 
 end
 
-loadLocale(currentLanguage)
 
 local function getLocalizedText(key)
-    return locale[key]
+    return locale[key] or "TRANSLATION_MISSING" 
 end
 
 local function sendNotification(type, message, duration)
@@ -103,19 +98,23 @@ RegisterCommand('setlang', function(source, args)
     if #args == 1 then
         local lang = string.lower(args[1])
         if lang == "jp" or lang == "en" then
-            if loadLocale(lang) then
-                currentLanguage = lang
-                sendNotification("gta", string.format(getLocalizedText("language_set"), lang), 2000)
-            else
-                sendNotification("gta", getLocalizedText("invalid_language"), 3000)
+            
+            
+            currentLanguage = lang
+            locale = RPlimitspeedLocale[currentLanguage] or {}
+            if not RPlimitspeedLocale[currentLanguage] then
+                print(string.format('^1[RPlimitspeed]^0 Warning: Translations not found for switched locale: %s.', currentLanguage))
+                locale = RPlimitspeedLocale['jp'] or {} 
             end
+            sendNotification("gta", string.format(getLocalizedText("language_set"), lang), 2000)
         else
-            sendNotification("gta", getLocalizedText("usage_setlang"), 3000)
+            sendNotification("gta", getLocalizedText("invalid_language"), 3000)
         end
     else
         sendNotification("gta", getLocalizedText("usage_setlang"), 3000)
     end
 end, false)
+
 
 Citizen.CreateThread(function()
     while true do
@@ -128,7 +127,7 @@ Citizen.CreateThread(function()
             elseif IsControlJustPressed(0, 18) then -- INPUT_ENTER
                 speedLimit = currentSpeedLimit
                 isSpeedLimited = true
-                isSpeedLimitUIOpen = false -- UIを閉じる
+                isSpeedLimitUIOpen = false 
                 sendNotification(notificationType, string.format(getLocalizedText("speed_limit_set"), speedLimit), 3000)
             end
         end
@@ -157,10 +156,17 @@ Citizen.CreateThread(function()
                 if currentVehicleSpeed > speedLimit then
                     SetEntityMaxSpeed(vehicle, speedLimit / 3.6)
                 else
-                    SetEntityMaxSpeed(vehicle, 1000.0)
+                    SetEntityMaxSpeed(vehicle, 1000.0) 
                 end
             else
-                SetEntityMaxSpeed(vehicle, 1000.0)
+                SetEntityMaxSpeed(vehicle, 1000.0) 
+            end
+        else
+            -- 車から降りたら速度制限を解除
+            if isSpeedLimited then
+                isSpeedLimited = false
+                speedLimit = 0.0
+                sendNotification(notificationType, getLocalizedText("speed_limit_disabled"), 3000)
             end
         end
     end
