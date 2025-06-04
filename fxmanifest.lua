@@ -3,18 +3,20 @@ game 'gta5'
 
 author 'R tachibana'
 description 'RPlimitspeed allows you to set speed limits for your own vehicle.'
-version '1.0.0'
 
--- client script
-client_script{
+client_script {
     'client.lua',
 }
 
+shared_script {
+    'locales/*.lua', 
+}
+
 files {
-    'locale/en.lua',
-    'locale/jp.lua',
+    'locales/en.lua', 
+    'locales/jp.lua', 
 }
 
 data_files {
-    ['locales'] = 'locale/*', 
+    ['locales'] = 'locales/*', 
 }
