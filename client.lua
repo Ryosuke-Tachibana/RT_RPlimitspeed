@@ -5,8 +5,7 @@ local speedLimit = 0.0
 local isInVehicle = false 
 local notificationType = "okok" --'ox''qb''gta''okok'
 
-local currentLanguage = GetConvar('RPlimitspeed_locale', 'jp') 
-
+local currentLanguage = GetConvar('RPlimitspeed_locale', 'jp') -- サーバー側の設定から取得、デフォルトは'jp'
 
 local locale = RPlimitspeedLocale[currentLanguage] or {} 
 
@@ -15,7 +14,6 @@ if not RPlimitspeedLocale[currentLanguage] then
     print(string.format('^1[RPlimitspeed]^0 Error: Translations not found for locale: %s. Using default (jp) or empty.', currentLanguage))
     locale = RPlimitspeedLocale['jp'] or {} 
 end
-
 
 local function getLocalizedText(key)
     return locale[key] or "TRANSLATION_MISSING" 
@@ -39,6 +37,15 @@ Citizen.CreateThread(function()
     while true do
         Citizen.Wait(0)
         if isSpeedLimitUIOpen then
+            -- UIが開いている間、ゲーム側のキー入力を無効化してUI操作に専念させる（★追加・修正）
+            DisableControlAction(0, 172, true) -- INPUT_UP (上矢印キー)
+            DisableControlAction(0, 173, true) -- INPUT_DOWN (下矢印キー)
+            DisableControlAction(0, 18, true)  -- INPUT_ENTER (Enterキー)
+            DisableControlAction(0, 27, true)  -- INPUT_PHONE (Escキーなど、UIを閉じるキーも追加すると良いかも)
+            DisableControlAction(0, 200, true) -- INPUT_MOUSE_WHEEL_UP (マウスホイールアップ)
+            DisableControlAction(0, 201, true) -- INPUT_MOUSE_WHEEL_DOWN (マウスホイールダウン)
+
+
             local x = 0.01
             local y = 0.05
             local width = 0.2
@@ -71,12 +78,18 @@ end)
 RegisterCommand('setlimitspeed', function()
     isSpeedLimitUIOpen = not isSpeedLimitUIOpen
     
-    if not isSpeedLimitUIOpen and isSpeedLimited then
-        sendNotification(notificationType, string.format(getLocalizedText("speed_limit_set"), speedLimit), 3000)
-    elseif not isSpeedLimitUIOpen and not isSpeedLimited and speedLimit > 0 then
-        sendNotification(notificationType, getLocalizedText("speed_limit_disabled"), 3000)
-    elseif not isSpeedLimitUIOpen then
+    
+    if not isSpeedLimitUIOpen then
+        if isSpeedLimited then
+            sendNotification(notificationType, string.format(getLocalizedText("speed_limit_set"), speedLimit), 3000)
+        elseif speedLimit > 0 then 
+            sendNotification(notificationType, getLocalizedText("speed_limit_disabled"), 3000)
+            isSpeedLimited = false 
+            speedLimit = 0.0 
+        end
+    else
         
+        currentSpeedLimit = speedLimit > 0 and speedLimit or 50.0 
     end
 end, false)
 
@@ -98,8 +111,6 @@ RegisterCommand('setlang', function(source, args)
     if #args == 1 then
         local lang = string.lower(args[1])
         if lang == "jp" or lang == "en" then
-            
-            
             currentLanguage = lang
             locale = RPlimitspeedLocale[currentLanguage] or {}
             if not RPlimitspeedLocale[currentLanguage] then
@@ -115,19 +126,22 @@ RegisterCommand('setlang', function(source, args)
     end
 end, false)
 
-
 Citizen.CreateThread(function()
     while true do
         Citizen.Wait(0)
         if isSpeedLimitUIOpen then
-            if IsControlJustPressed(0, 172) then -- INPUT_UP
+            -- キー入力の処理 (ここに DisableControlAction
+            -- INPUT_UP / INPUT_DOWN / INPUT_ENTER 
+            if IsControlJustPressed(0, 172) then -- INPUT_UP (上矢印キー)
                 currentSpeedLimit = currentSpeedLimit + 5.0
-            elseif IsControlJustPressed(0, 173) then -- INPUT_DOWN
+                -- print(string.format("[RPlimitspeed] Speed up: %.1f", currentSpeedLimit)) -- デバッグ用
+            elseif IsControlJustPressed(0, 173) then -- INPUT_DOWN (下矢印キー)
                 currentSpeedLimit = math.max(0.0, currentSpeedLimit - 5.0)
-            elseif IsControlJustPressed(0, 18) then -- INPUT_ENTER
+                -- print(string.format("[RPlimitspeed] Speed down: %.1f", currentSpeedLimit)) -- デバッグ用
+            elseif IsControlJustPressed(0, 18) then -- INPUT_ENTER (Enterキー)
                 speedLimit = currentSpeedLimit
                 isSpeedLimited = true
-                isSpeedLimitUIOpen = false 
+                isSpeedLimitUIOpen = false -- UIを閉じる
                 sendNotification(notificationType, string.format(getLocalizedText("speed_limit_set"), speedLimit), 3000)
             end
         end
@@ -139,27 +153,36 @@ Citizen.CreateThread(function()
         Citizen.Wait(1000)
         local ped = PlayerPedId()
         if not IsPedInAnyVehicle(ped, false) then
-            isSpeedLimitUIOpen = false
+            isSpeedLimitUIOpen = false 
+            
+            if isSpeedLimited then
+                isSpeedLimited = false
+                speedLimit = 0.0
+            
+                sendNotification(notificationType, getLocalizedText("speed_limit_disabled"), 3000)
+            end
         end
     end
 end)
 
 Citizen.CreateThread(function()
     while true do
-        Citizen.Wait(0)
+        Citizen.Wait(0) 
         local ped = PlayerPedId()
+        local vehicle = GetVehiclePedIsIn(ped, false)
+
         if IsPedInAnyVehicle(ped, false) then
-            local vehicle = GetVehiclePedIsIn(ped, false)
             if isSpeedLimited then
                 local currentVehicleSpeedVector = GetEntitySpeedVector(vehicle)
                 local currentVehicleSpeed = math.sqrt(currentVehicleSpeedVector.x^2 + currentVehicleSpeedVector.y^2 + currentVehicleSpeedVector.z^2) * 3.6
+
                 if currentVehicleSpeed > speedLimit then
                     SetEntityMaxSpeed(vehicle, speedLimit / 3.6)
                 else
-                    SetEntityMaxSpeed(vehicle, 1000.0) 
+                    SetEntityMaxSpeed(vehicle, GetVehicleMaxSpeed(vehicle)) -- 車の本来の最高速度に戻す
                 end
             else
-                SetEntityMaxSpeed(vehicle, 1000.0) 
+                SetEntityMaxSpeed(vehicle, GetVehicleMaxSpeed(vehicle)) -- 速度制限がなければ通常の最高速度に戻す
             end
         else
             -- 車から降りたら速度制限を解除
@@ -168,6 +191,6 @@ Citizen.CreateThread(function()
                 speedLimit = 0.0
                 sendNotification(notificationType, getLocalizedText("speed_limit_disabled"), 3000)
             end
-        end
-    end
+        end 
+    end 
 end)
